@@ -118,36 +118,42 @@ window.clearMonth = function(month) {
     }
 };
 
-/* 엑셀 파싱 로직 */
+/* 엑셀 파싱 로직 (오류 수정 및 안정성 강화) */
 function handleExcelUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (event) => {
-        const data = event.target.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet);
-        
-        if (json.length === 0) {
-            alert("엑셀 파일이 비어있습니다.");
-            return;
-        }
+        try {
+            // 파일을 더 안정적으로 읽어오도록 수정
+            const data = new Uint8Array(event.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const json = XLSX.utils.sheet_to_json(worksheet);
+            
+            if (json.length === 0) {
+                alert("엑셀 파일이 비어있습니다.");
+                return;
+            }
 
-        const parsedData = processExcelData(json);
-        if (parsedData.length > 0) {
-            birthdays = [...birthdays, ...parsedData];
-            saveToLocalStorage();
-            renderAll();
-            alert(`${parsedData.length}건의 데이터 연동 성공!`);
-            document.getElementById('dashboard').scrollIntoView({behavior: 'smooth'});
-        } else {
-            alert("데이터를 찾을 수 없습니다. 예시 양식을 참고해 주세요.");
+            const parsedData = processExcelData(json);
+            if (parsedData.length > 0) {
+                birthdays = [...birthdays, ...parsedData];
+                saveToLocalStorage();
+                renderAll();
+                alert(`${parsedData.length}건의 데이터 연동 성공!`);
+                document.getElementById('dashboard').scrollIntoView({behavior: 'smooth'});
+            } else {
+                alert("데이터를 찾을 수 없습니다. 양식의 이름(첫 줄)이 맞는지 확인해 주세요.");
+            }
+        } catch (error) {
+            console.error(error);
+            alert("파일을 읽는 중 오류가 발생했습니다.");
         }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
     e.target.value = '';
 }
 
@@ -156,42 +162,6 @@ function processExcelData(json) {
     json.forEach(row => {
         let name = row['이름'] || row['성명'] || row['Name'] || row['name'];
         let dateVal = row['생일'] || row['생년월일'] || row['양력생일'] || row['날짜'];
-        let branchVal = row['지점명'] || row['지점'] || 소속 || 부서;
-        let noteVal = row['특이사항'] || row['비고'] || row['메모'];
-        
-        if (name && dateVal) {
-            const parsedDate = parseDateString(dateVal);
-            if (parsedDate) {
-                results.push({
-                    id: Math.random().toString(36).substring(7),
-                    name: String(name).trim(),
-                    month: parsedDate.month,
-                    day: parsedDate.day,
-                    branch: branchVal ? String(branchVal).trim() : '',
-                    note: noteVal ? String(noteVal).trim() : ''
-                });
-            }
-        }
-    });
-    return results;
-}
-
-function parseDateString(val) {
-    let m = null, d = null;
-    if (typeof val === 'number') {
-        const excelEpoch = new Date(1899, 11, 31);
-        const dateObj = new Date(excelEpoch.getTime() + val * 86400000);
-        m = dateObj.getMonth() + 1;
-        d = dateObj.getDate();
-    } else if (typeof val === 'string') {
-        const matchRegex = /(\d{1,4})[./-](\d{1,2})[./-](\d{1,2})|(\d{1,2})[./-](\d{1,2})/;
-        const match = val.match(matchRegex);
-        if (match) {
-            if (match[1]) { m = parseInt(match[2], 10); d = parseInt(match[3], 10); } 
-            else { m = parseInt(match[4], 10); d = parseInt(match[5], 10); }
-        } else {
-            const jsDate = new Date(val);
-            if (!isNaN(jsDate.getTime())) { m = jsDate.getMonth() + 1; d = jsDate.getDate(); }
-        }
-    }
-    if (m >= 1 && m
+        // [수정 완료] 아래 줄에서 '소속', '부서'에 따옴표가 빠져서 에러가 나던 것을 고쳤습니다!
+        let branchVal = row['지점명'] || row['지점'] || row['소속'] || row['부서'];
+        let noteVal = row['
