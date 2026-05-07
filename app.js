@@ -80,23 +80,26 @@ function convertLunarToSolar() {
     }
 }
 
-/* 카카오톡 축하 공유 함수 */
+/* 카카오톡 축하 공유 함수 (요청하신 문구로 수정 완료) */
 function shareToKakao(name, branch) {
-    const branchPrefix = branch ? `[${branch}] ` : '';
-    const defaultText = `🎉 오늘은 ${branchPrefix}${name}님의 생일입니다!\n바쁘시더라도 잊지 말고 축하 메시지를 전해주세요! 🎂🎁`;
+    const branchText = branch ? `${branch} ` : '';
+    // 요청하신 문구로 정확히 수정
+    const defaultText = `🎉 ${branchText}${name}님의 생일을 진심으로 축하드립니다. 오늘 하루 행복한 일 가득하시고, 늘 건강과 좋은 일만 함께하시길 바랍니다 😊`;
     
     if (navigator.share) {
+        // 모바일 기기에서 카카오톡을 포함한 공유 창을 띄웁니다.
         navigator.share({
-            title: '생일 알림',
+            title: '생일 축하',
             text: defaultText,
         }).catch(err => {
             console.log("공유 취소됨: ", err);
         });
     } else {
+        // PC 등 지원하지 않는 환경에서는 문구를 클립보드에 복사해줍니다.
         navigator.clipboard.writeText(defaultText).then(() => {
-            alert(`"${name}" 님을 위한 축하 멘트가 복사되었습니다!\nPC 카카오톡 등에 붙여넣기(Ctrl+V) 해주세요.`);
+            alert(`"${name}" 님을 위한 축하 메시지가 복사되었습니다!\n카카오톡 대화창에 붙여넣기(Ctrl+V) 해주세요.`);
         }).catch(() => {
-            alert("공유를 지원하지 않는 브라우저입니다.");
+            alert("공유 기능을 지원하지 않는 브라우저입니다.");
         });
     }
 }
@@ -315,7 +318,6 @@ function renderDashboard(query = '') {
     for (let m = 1; m <= 12; m++) {
         const mBirthdays = currentData.filter(b => b.month === m).sort((a,b) => a.day - b.day);
         
-        // 검색 중일 때는 데이터가 있는 달만 렌더링
         if (query && mBirthdays.length === 0) continue;
 
         let highlightStyle = (m === currentMonth && !query) ? 'border: 1px solid var(--accent-1); box-shadow: 0 0 20px rgba(236, 72, 153, 0.2);' : '';
@@ -379,13 +381,7 @@ function downloadSampleExcel() {
     ];
     const ws = XLSX.utils.aoa_to_sheet(ws_data);
     
-    // 컬럼 너비 조정 (가독성 향상)
-    const wscols = [
-        {wch: 10}, 
-        {wch: 15}, 
-        {wch: 15},
-        {wch: 35} 
-    ];
+    const wscols = [ {wch: 10}, {wch: 15}, {wch: 15}, {wch: 35} ];
     ws['!cols'] = wscols;
 
     const wb = XLSX.utils.book_new();
