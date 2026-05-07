@@ -2,34 +2,45 @@
 let birthdays = [];
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. 페이지가 열리자마자 저장된 데이터를 불러옵니다.
+    // 1. 페이지 로딩 시 기존 데이터 불러오기
     loadFromLocalStorage();
-    
+
+    // 2. 샘플 다운로드 버튼 연결 (에러 방지 처리)
     const dlBtns = ['hero-sample-download', 'dash-sample-download'];
     dlBtns.forEach(id => {
         const btn = document.getElementById(id);
         if (btn) btn.addEventListener('click', downloadSampleExcel);
     });
 
+    // 3. 엑셀 업로드 버튼 연결
     const uploadInputs = ['excel-upload-main', 'excel-upload-dash'];
     uploadInputs.forEach(id => {
         const input = document.getElementById(id);
         if (input) input.addEventListener('change', handleExcelUpload);
     });
 
-    document.getElementById('clear-data').addEventListener('click', () => {
-        if (confirm("정말 모든 데이터를 삭제하시겠습니까? (되돌릴 수 없습니다)")) {
-            birthdays = [];
-            saveToLocalStorage(); // 빈 배열 저장 (전체 삭제)
-            renderAll();
-            alert("전체 데이터가 삭제되었습니다.");
-        }
-    });
+    // 4. 전체 삭제 버튼 연결
+    const clearBtn = document.getElementById('clear-data');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            if (confirm("정말 모든 데이터를 삭제하시겠습니까? (되돌릴 수 없습니다)")) {
+                birthdays = [];
+                saveToLocalStorage();
+                renderAll();
+                alert("전체 데이터가 삭제되었습니다.");
+            }
+        });
+    }
 
-    document.getElementById('lunar-modal').addEventListener('click', (e) => {
-        if (e.target === document.getElementById('lunar-modal')) closeLunarModal();
-    });
+    // 5. 음력 변환기 모달 연결
+    const lunarModal = document.getElementById('lunar-modal');
+    if (lunarModal) {
+        lunarModal.addEventListener('click', (e) => {
+            if (e.target === lunarModal) closeLunarModal();
+        });
+    }
 
+    // 6. 검색창 연결
     const searchInput = document.getElementById('search-input');
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {
@@ -37,14 +48,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 2. 불러온 데이터를 화면에 그립니다.
+    // 7. 화면 그리기
     renderAll();
 });
 
-/* 로컬 스토리지 저장 및 로드 함수 */
+/* 데이터 영구 저장 및 불러오기 기능 */
 function saveToLocalStorage() {
-    // 'birthTrakData'라는 이름으로 브라우저에 데이터를 영구 저장합니다.
-    localStorage.setItem('birthTrakData', JSON.stringify(birthdays));
+    try {
+        localStorage.setItem('birthTrakData', JSON.stringify(birthdays));
+    } catch (e) {
+        console.error("저장 실패", e);
+    }
 }
 
 function loadFromLocalStorage() {
@@ -52,7 +66,7 @@ function loadFromLocalStorage() {
         const saved = localStorage.getItem('birthTrakData');
         birthdays = saved ? JSON.parse(saved) : [];
     } catch (e) {
-        console.error("데이터 로딩 실패:", e);
+        console.error("불러오기 실패", e);
         birthdays = [];
     }
 }
@@ -124,7 +138,7 @@ function shareToKakao(name, branch) {
 window.deletePerson = function(id) {
     if (confirm("해당 대상자를 삭제하시겠습니까?")) {
         birthdays = birthdays.filter(b => b.id !== id);
-        saveToLocalStorage(); // 변경사항 저장
+        saveToLocalStorage();
         renderAll();
     }
 };
@@ -132,12 +146,12 @@ window.deletePerson = function(id) {
 window.clearMonth = function(month) {
     if (confirm(`${month}월 대상자 목록을 모두 비우시겠습니까?`)) {
         birthdays = birthdays.filter(b => b.month !== month);
-        saveToLocalStorage(); // 변경사항 저장
+        saveToLocalStorage();
         renderAll();
     }
 };
 
-/* 엑셀 파싱 로직 */
+/* 엑셀 데이터 파싱 및 업로드 (안정성 모드) */
 function handleExcelUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -145,34 +159,39 @@ function handleExcelUpload(e) {
     const reader = new FileReader();
     reader.onload = (event) => {
         try {
-            const data = new Uint8Array(event.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
+            if (typeof XLSX === 'undefined') {
+                alert("엑셀 처리 라이브러리를 불러오지 못했습니다. 페이지를 새로고침 해주세요.");
+                return;
+            }
+
+            const data = event.target.result;
+            // 가장 호환성이 좋은 바이너리 방식으로 읽기
+            const workbook = XLSX.read(data, { type: 'binary' });
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];
             const json = XLSX.utils.sheet_to_json(worksheet);
             
             if (json.length === 0) {
-                alert("엑셀 파일이 비어있습니다.");
+                alert("업로드한 엑셀 파일이 비어있습니다.");
                 return;
             }
 
             const parsedData = processExcelData(json);
             if (parsedData.length > 0) {
-                // 기존 데이터에 새 데이터를 합칩니다.
                 birthdays = [...birthdays, ...parsedData];
-                saveToLocalStorage(); // 합친 데이터를 저장합니다.
+                saveToLocalStorage();
                 renderAll();
                 alert(`${parsedData.length}건의 데이터 연동 성공!`);
                 document.getElementById('dashboard').scrollIntoView({behavior: 'smooth'});
             } else {
-                alert("데이터를 찾을 수 없습니다. 양식의 이름(첫 줄)이 맞는지 확인해 주세요.");
+                alert("데이터를 찾을 수 없습니다. 양식의 이름(첫 줄)이 올바른지 확인해 주세요.");
             }
         } catch (error) {
             console.error(error);
-            alert("파일을 읽는 중 오류가 발생했습니다.");
+            alert("엑셀 파일을 분석하는 중 오류가 발생했습니다.");
         }
     };
-    reader.readAsArrayBuffer(file);
+    reader.readAsBinaryString(file);
     e.target.value = '';
 }
 
@@ -351,62 +370,4 @@ function renderDashboard(query = '') {
                         <span>${m}월 ${m === currentMonth ? '✨' : ''}</span>
                         <span class="count">${mBirthdays.length}명</span>
                     </div>
-                    ${mBirthdays.length > 0 ? `<button class="btn-clear-month" onclick="clearMonth(${m})" title="${m}월 대상자 모두 삭제">비우기</button>` : ''}
-                </div>
-                <ul class="birthday-list" style="max-height: 250px;">
-        `;
-        if (mBirthdays.length === 0) {
-            gridHtml += `<li style="color: var(--text-secondary); font-size: 0.9rem; text-align: center; padding: 1rem 0;">데이터 없음</li>`;
-        } else {
-            mBirthdays.forEach((b, idx) => {
-                let branchTag = b.branch ? `<span class="branch-badge mini">${b.branch}</span>` : '';
-                let noteText = b.note ? `<span class="note-text"> ${b.note}</span>` : '';
-
-                gridHtml += `
-                    <li class="birthday-item" style="padding: 0.7rem; margin-bottom: 0.5rem;">
-                        <div class="avatar gradient-${idx % 5}" style="width:36px; height:36px; font-size:1rem; border-radius:10px;">${b.name.charAt(0)}</div>
-                        <div class="info">
-                            <h4 style="font-size: 0.95rem; margin-bottom: 0.2rem;">${b.name}${branchTag}</h4>
-                            <p style="font-size: 0.8rem; color: var(--text-secondary);">${m}월 ${b.day}일${noteText}</p>
-                        </div>
-                        <div style="display:flex; gap:0.5rem; justify-content:center; align-items:center;">
-                            <button class="btn-icon-kakao share-btn" style="width:30px; height:30px; font-size:0.85rem;" data-name="${b.name}" data-branch="${b.branch}">💬</button>
-                            <button class="btn-icon-danger" style="width:30px; height:30px; font-size:0.85rem;" onclick="deletePerson('${b.id}')">✕</button>
-                        </div>
-                    </li>
-                `;
-            });
-        }
-        gridHtml += `</ul></div>`;
-    }
-    gridHtml += '</div>';
-    dashContainer.innerHTML = gridHtml;
-    
-    attachShareEvents(dashContainer);
-}
-
-function attachShareEvents(container) {
-    const shareBtns = container.querySelectorAll('.share-btn');
-    shareBtns.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const name = e.currentTarget.getAttribute('data-name');
-            const branch = e.currentTarget.getAttribute('data-branch');
-            shareToKakao(name, branch);
-        });
-    });
-}
-
-function downloadSampleExcel() {
-    const ws_data = [
-        ["이름", "생일", "지점명", "특이사항"],
-        ["홍길동", "1999-01-01", "서울지점", "AMC"]
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(ws_data);
-    
-    const wscols = [ {wch: 10}, {wch: 15}, {wch: 15}, {wch: 35} ];
-    ws['!cols'] = wscols;
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "지점별생일목록");
-    XLSX.writeFile(wb, "지점별_생일관리_양식.xlsx");
-}
+                    ${mBirthdays.length > 0 ? `<button class="btn-clear-month" onclick="clearMonth(${m})" title
