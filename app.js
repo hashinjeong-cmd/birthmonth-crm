@@ -370,4 +370,70 @@ function renderDashboard(query = '') {
                         <span>${m}월 ${m === currentMonth ? '✨' : ''}</span>
                         <span class="count">${mBirthdays.length}명</span>
                     </div>
-                    ${mBirthdays.length > 0 ? `<button class="btn-clear-month" onclick="clearMonth(${m})" title
+                    ${mBirthdays.length > 0 ? `<button class="btn-clear-month" onclick="clearMonth(${m})" title="${m}월 대상자 모두 삭제">비우기</button>` : ''}
+                </div>
+                <ul class="birthday-list" style="max-height: 250px;">
+        `;
+        if (mBirthdays.length === 0) {
+            gridHtml += `<li style="color: var(--text-secondary); font-size: 0.9rem; text-align: center; padding: 1rem 0;">데이터 없음</li>`;
+        } else {
+            mBirthdays.forEach((b, idx) => {
+                let branchTag = b.branch ? `<span class="branch-badge mini">${b.branch}</span>` : '';
+                let noteText = b.note ? `<span class="note-text"> ${b.note}</span>` : '';
+
+                gridHtml += `
+                    <li class="birthday-item" style="padding: 0.7rem; margin-bottom: 0.5rem;">
+                        <div class="avatar gradient-${idx % 5}" style="width:36px; height:36px; font-size:1rem; border-radius:10px;">${b.name.charAt(0)}</div>
+                        <div class="info">
+                            <h4 style="font-size: 0.95rem; margin-bottom: 0.2rem;">${b.name}${branchTag}</h4>
+                            <p style="font-size: 0.8rem; color: var(--text-secondary);">${m}월 ${b.day}일${noteText}</p>
+                        </div>
+                        <div style="display:flex; gap:0.5rem; justify-content:center; align-items:center;">
+                            <button class="btn-icon-kakao share-btn" style="width:30px; height:30px; font-size:0.85rem;" data-name="${b.name}" data-branch="${b.branch}">💬</button>
+                            <button class="btn-icon-danger" style="width:30px; height:30px; font-size:0.85rem;" onclick="deletePerson('${b.id}')">✕</button>
+                        </div>
+                    </li>
+                `;
+            });
+        }
+        gridHtml += `</ul></div>`;
+    }
+    gridHtml += '</div>';
+    dashContainer.innerHTML = gridHtml;
+    
+    attachShareEvents(dashContainer);
+}
+
+function attachShareEvents(container) {
+    const shareBtns = container.querySelectorAll('.share-btn');
+    shareBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const name = e.currentTarget.getAttribute('data-name');
+            const branch = e.currentTarget.getAttribute('data-branch');
+            shareToKakao(name, branch);
+        });
+    });
+}
+
+function downloadSampleExcel() {
+    try {
+        if (typeof XLSX === 'undefined') {
+            alert("엑셀 양식을 만드는 중입니다. 잠시 후 다시 눌러주세요.");
+            return;
+        }
+        const ws_data = [
+            ["이름", "생일", "지점명", "특이사항"],
+            ["홍길동", "1999-01-01", "서울지점", "기본 양식 예시"]
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(ws_data);
+        const wscols = [ {wch: 10}, {wch: 15}, {wch: 15}, {wch: 35} ];
+        ws['!cols'] = wscols;
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "지점별생일목록");
+        XLSX.writeFile(wb, "지점별_생일관리_양식.xlsx");
+    } catch (error) {
+        console.error("다운로드 에러:", error);
+        alert("양식 다운로드 중 오류가 발생했습니다.");
+    }
+}
