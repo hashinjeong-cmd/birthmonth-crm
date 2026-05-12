@@ -2,24 +2,20 @@
 let birthdays = [];
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. 페이지 로딩 시 기존 데이터 불러오기
     loadFromLocalStorage();
 
-    // 2. 샘플 다운로드 버튼 연결 (에러 방지 처리)
     const dlBtns = ['hero-sample-download', 'dash-sample-download'];
     dlBtns.forEach(id => {
         const btn = document.getElementById(id);
         if (btn) btn.addEventListener('click', downloadSampleExcel);
     });
 
-    // 3. 엑셀 업로드 버튼 연결
     const uploadInputs = ['excel-upload-main', 'excel-upload-dash'];
     uploadInputs.forEach(id => {
         const input = document.getElementById(id);
         if (input) input.addEventListener('change', handleExcelUpload);
     });
 
-    // 4. 전체 삭제 버튼 연결
     const clearBtn = document.getElementById('clear-data');
     if (clearBtn) {
         clearBtn.addEventListener('click', () => {
@@ -32,7 +28,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 5. 음력 변환기 모달 연결
     const lunarModal = document.getElementById('lunar-modal');
     if (lunarModal) {
         lunarModal.addEventListener('click', (e) => {
@@ -40,7 +35,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 6. 검색창 연결
     const searchInput = document.getElementById('search-input');
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {
@@ -48,7 +42,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 7. 화면 그리기
     renderAll();
 });
 
@@ -151,7 +144,7 @@ window.clearMonth = function(month) {
     }
 };
 
-/* 엑셀 데이터 파싱 및 업로드 (안정성 모드) */
+/* 엑셀 데이터 파싱 및 업로드 */
 function handleExcelUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -165,7 +158,6 @@ function handleExcelUpload(e) {
             }
 
             const data = event.target.result;
-            // 가장 호환성이 좋은 바이너리 방식으로 읽기
             const workbook = XLSX.read(data, { type: 'binary' });
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];
@@ -197,22 +189,53 @@ function handleExcelUpload(e) {
 
 function processExcelData(json) {
     const results = [];
+    const currentYear = new Date().getFullYear(); // 올해 연도 가져오기
+
     json.forEach(row => {
         let name = row['이름'] || row['성명'] || row['Name'] || row['name'];
         let dateVal = row['생일'] || row['생년월일'] || row['양력생일'] || row['날짜'];
         let branchVal = row['지점명'] || row['지점'] || row['소속'] || row['부서'];
         let noteVal = row['특이사항'] || row['비고'] || row['메모'];
         
+        // 🔹 새롭게 추가된 로직: 음력 여부 판별
+        let typeVal = row['구분'] || row['음양'] || row['음양구분'];
+        let isLunar = false;
+        if (typeVal && String(typeVal).includes('음')) isLunar = true;
+        if (noteVal && String(noteVal).includes('음력')) isLunar = true;
+        if (dateVal && String(dateVal).includes('음')) isLunar = true;
+        
         if (name && dateVal) {
             const parsedDate = parseDateString(dateVal);
             if (parsedDate) {
+                let finalMonth = parsedDate.month;
+                let finalDay = parsedDate.day;
+                let finalNote = noteVal ? String(noteVal).trim() : '';
+
+                // 🔹 음력인 경우: 올해 기준 양력 날짜로 자동 변환
+                if (isLunar) {
+                    try {
+                        const lunarObj = Lunar.fromYmd(currentYear, parsedDate.month, parsedDate.day);
+                        const solarObj = lunarObj.getSolar();
+                        finalMonth = solarObj.getMonth();
+                        finalDay = solarObj.getDay();
+                        
+                        // 메모에 원래 음력 생일 표시 추가
+                        const lunarMark = `(음력 ${parsedDate.month}/${parsedDate.day})`;
+                        if (!finalNote.includes('음력')) {
+                            finalNote = finalNote ? `${finalNote} ${lunarMark}` : lunarMark;
+                        }
+                    } catch (e) {
+                        console.error("음력 변환 실패:", e);
+                    }
+                }
+
                 results.push({
                     id: Math.random().toString(36).substring(7),
                     name: String(name).trim(),
-                    month: parsedDate.month,
-                    day: parsedDate.day,
+                    month: finalMonth,
+                    day: finalDay,
                     branch: branchVal ? String(branchVal).trim() : '',
-                    note: noteVal ? String(noteVal).trim() : ''
+                    note: finalNote
                 });
             }
         }
@@ -228,14 +251,21 @@ function parseDateString(val) {
         m = dateObj.getMonth() + 1;
         d = dateObj.getDate();
     } else if (typeof val === 'string') {
-        const matchRegex = /(\d{1,4})[./-](\d{1,2})[./-](\d{1,2})|(\d{1,2})[./-](\d{1,2})/;
-        const match = val.match(matchRegex);
-        if (match) {
-            if (match[1]) { m = parseInt(match[2], 10); d = parseInt(match[3], 10); } 
-            else { m = parseInt(match[4], 10); d = parseInt(match[5], 10); }
+        const strVal = val.replace(/\s+/g, ''); // 공백 제거
+        const koMatch = strVal.match(/(\d{1,2})월(\d{1,2})일/); // "5월 15일" 형식 지원
+        if (koMatch) {
+            m = parseInt(koMatch[1], 10);
+            d = parseInt(koMatch[2], 10);
         } else {
-            const jsDate = new Date(val);
-            if (!isNaN(jsDate.getTime())) { m = jsDate.getMonth() + 1; d = jsDate.getDate(); }
+            const matchRegex = /(\d{1,4})[./-](\d{1,2})[./-](\d{1,2})|(\d{1,2})[./-](\d{1,2})/;
+            const match = strVal.match(matchRegex);
+            if (match) {
+                if (match[1]) { m = parseInt(match[2], 10); d = parseInt(match[3], 10); } 
+                else { m = parseInt(match[4], 10); d = parseInt(match[5], 10); }
+            } else {
+                const jsDate = new Date(val);
+                if (!isNaN(jsDate.getTime())) { m = jsDate.getMonth() + 1; d = jsDate.getDate(); }
+            }
         }
     }
     if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return { month: m, day: d };
@@ -421,12 +451,14 @@ function downloadSampleExcel() {
             alert("엑셀 양식을 만드는 중입니다. 잠시 후 다시 눌러주세요.");
             return;
         }
+        // 다운로드용 엑셀 양식에 '구분' 열 추가
         const ws_data = [
-            ["이름", "생일", "지점명", "특이사항"],
-            ["홍길동", "1999-01-01", "서울지점", "기본 양식 예시"]
+            ["이름", "생일", "구분", "지점명", "특이사항"],
+            ["홍길동", "1999-01-01", "양력", "서울지점", "기본 양식 예시"],
+            ["이음력", "05-15", "음력", "부산지점", "음력으로 적으면 올해 양력으로 자동 변환됩니다"]
         ];
         const ws = XLSX.utils.aoa_to_sheet(ws_data);
-        const wscols = [ {wch: 10}, {wch: 15}, {wch: 15}, {wch: 35} ];
+        const wscols = [ {wch: 10}, {wch: 15}, {wch: 10}, {wch: 15}, {wch: 35} ];
         ws['!cols'] = wscols;
 
         const wb = XLSX.utils.book_new();
